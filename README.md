@@ -197,9 +197,133 @@ if reflect.DeepEqual(list[0], expected) {
   fmt.Println("Woot! My join worked!")
 }
 
+i64, err := dbmap.SelectInt("select count(*) from foo where blah=?", blahVal)
+
+s, err := dbmap.SelectStr("select name from foo where blah=?", blahVal)
+
+_, err := dbm.Select(&dest, "select * from Foo where name = :name and age = :age", map[string]interface{} {
+  "name": "Rob",
+  "age": 31
+})
+
+res, err := dbmap.Exec("delete from invoice_test where PersonId=?", 10)
+
+func insertInv(dbmap *DbMap, inv *Invoice, per *Person) error {
+  trans, err := dbmap.Begin()
+  if err != nil {
+    return err
+  }
+  
+  err = trans.Insert(per)
+  checkErr(err, "Insert failed")
+  
+  inv.PersonId = per.Id
+  err = trans.Insert(inv)
+  checkErr(err, "Insert failed")
+  
+  return trans.Commit()
+}
+
+
+func (i * Invoice) PreInsert(s gorp.SqlExecutor) error {
+  i.Created = time.Now().UnixNano()
+  i.Updated = i.Created
+  return nil
+}
+
+func (i *Invoice) PreUpdate(s gorp.SqlExecutor) error {
+  i.Updated = time.Now().UnixNano()
+  return nil
+}
+
+func (p *Person) PreDelete(s gorp.SqlExecutor) error {
+  query := "delete from invoice_test where PersonId=?"
+  
+  _, err := s.Exec(query, p.Id)
+  
+  if err != nil {
+    return err
+  }
+  return nil
+}
+
+
+type Person struct {
+  Id int64
+  Created int64
+  Updated int64
+  FName string
+  LName string
+  
+  Version int64
+}
+
+p1 := &Person{0, 0, 0, "Bob", "Smith", 0}
+err = dbmap.Insert(p1)
+checkErr(err, "Insert failed")
+
+obj, err := dbmap.Get(Person{}, p1.Id)
+p2 := obj.(*Person)
+p2.LName = "Edwards"
+_, err = dbmap.Update(p2)
+checkErr(err, "Update failed")
+
+p1.LName = "Howard"
+
+count, err := dbmap.Update(p1)
+_, ok := err.(gorp.OptimisticLockError)
+if ok {
+  fmt.Println("Tried to update row with stale date: %v\n", err)
+} else {
+  fmt.Printf("Unkown db err: %v\n", err)
+}
+
+
+type Account struct {
+  Id int64
+  AccId string
+}
+
+dbm.AddTable(iptab.Account{}).SetKeys(true, "id").AddIndex("AcctIdIndex", "Btree", []string{"AccId"}).SetUnique(true)
+
+err = dbm.CreateTablesIfNotExists()
+checkErr(err, "CreateTableIfNotExists failed")
+
+err = dbm.CreateIndex()
+checkErr(err, "CreateIndex failed")
+
+
+import (
+  "database/sql"
+  
+  sqlite "github.com/mattn/go-sqlite3"
+)
+
+func customDriver() (*sql.DB, error) {
+  sql.Register("sqlite3-custom", &sqlite.SQLiteDirver{
+    Extensions: []string{
+      "mod_spatialite",
+    },
+  })
+  
+  return sql.Open("sqlite3-custom", "/tmp/post_db.bin")
+}
+
+dbmap.SelectOne(&val, "select * from foo where id = ?", 30)
+
+err := dbmap.SelectOne(&val, "select * from where id = :id",
+map[string]interface{} { "id": 30})
 ```
 
-```
+```sh
+mysql
+
+export GORP_TEST_DSN=gomysql_test/gomysql_test/abc123
+export GORP_TEST_DIALECT=mysql
+
+go test
+
+go test -bench="Bench" -benchtime 10
 ```
 
 ```
